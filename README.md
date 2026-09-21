@@ -79,3 +79,105 @@ Entregar un repositorio propio que incluya:
 
 No modificar `data/payments.jsonl`; puede agregarse un conjunto de datos
 adicional para las pruebas.
+
+---
+
+# Resolución
+
+Implementado por **Sergio Morel**, septiembre de 2026.
+
+## Estado de la suite
+
+```
+12 passed, 1 failed
+```
+
+La que falla **no se puede satisfacer con Apache Beam 2.74.0**, que es la versión que fija
+el `pyproject.toml` de este mismo repositorio. El detalle y la evidencia están más abajo.
+
+```bash
+uv sync
+uv run pytest -q
+```
+
+## Qué se implementó
+
+| TODO | Qué resuelve |
+|---|---|
+| 1 · `parse_utc` | ISO-8601 con `Z` → `datetime` **timezone-aware**. Un naive se interpretaría en la zona del proceso, y entonces la ventana asignada dependería de en qué máquina corre el pipeline |
+| 2 · `assign_fixed_window` | Límites `[inicio, fin)` alineados **a la época**, no al primer evento, para que la misma ventana tenga los mismos límites entre comercios y entre corridas |
+| 3 · `summarize_payments` | El oráculo en Python puro: totales y auditoría con el motivo de cada decisión |
+| 4 · `build_windowed_totals_pipeline` | `Create` → `Filter` → `TimestampedValue` → `WindowInto` → clave por comercio → `CombinePerKey` → límites vía `WindowParam` |
+| 5 · `DeduplicatePayments.process` | `SetStateSpec` **por clave**: dos comercios pueden repetir un `event_id` sin interferirse |
+| 5b · `.expire` | Timer de *event time* que limpia el estado al vencer la ventana más la lateness |
+| 6 · `build_trigger_policy` | `AfterWatermark` con pane temprano por tiempo de procesamiento, revisiones tardías y modo **acumulativo** |
+| 7 · `make_idempotency_key` | `merchant_id|window_start`: identifica la **celda** del resultado, no el intento de escritura |
+| 8 · `simulate_sink_retries` | Contrasta *upsert* contra *append*: el mismo reintento deja una fila o dos |
+
+## Decisiones que el enunciado dejaba abiertas
+
+**Orden de evaluación en la auditoría:** primero el estado (`not_confirmed`), después la
+tolerancia (`too_late`) y al final la duplicación (`duplicate`). Un evento fuera de
+tolerancia **no se registra como visto**: nunca entró, así que un reintento posterior del
+mismo `event_id` debe volver a reportarse como fuera de tolerancia y no como duplicado.
+
+**Qué es una revisión:** un evento **aceptado** cuyo `arrival_time` es posterior al cierre
+de su ventana. Es decir, un total que alguien ya pudo haber leído y que cambia. Los eventos
+rechazados no son revisiones, porque no modifican ningún total.
+
+**Por qué el modo acumulativo:** cada pane trae el total de la ventana y no el delta, así el
+consumidor hace *upsert* por clave sin necesidad de recordar qué panes ya procesó. Con modo
+descartante habría que sumar, y entonces reprocesar un pane infla el resultado — la
+deduplicación se mudaría aguas abajo.
+
+**Por qué el estado necesita expiración:** la entrada de un pipeline de streaming es **no
+acotada**, así que el conjunto de `event_id` vistos crece sin límite si nadie lo limpia. El
+timer se programa contra el fin de la ventana **más la lateness permitida**, no contra el
+fin de la ventana: si expirara antes, un tardío legítimo volvería a parecer nuevo y se
+contaría dos veces — justo lo que la deduplicación existe para evitar.
+
+## ⚠️ Una prueba de la suite es insatisfacible en Beam 2.74.0
+
+`test_trigger_policy_has_lateness_and_accumulating_panes` incluye estas dos aserciones:
+
+```python
+assert policy.windowing.windowfn.size.seconds == 60
+assert policy.windowing.allowed_lateness.seconds == 120
+```
+
+Ambas leen un atributo `.seconds` sobre objetos `Duration`, **y `Duration` no lo tiene**:
+
+```python
+>>> from apache_beam.utils.timestamp import Duration, Timestamp
+>>> [a for a in dir(Duration) if not a.startswith("_")]
+['from_proto', 'of', 'to_proto']
+>>> [a for a in dir(Timestamp) if not a.startswith("_")]
+[..., 'seconds', ...]          # Timestamp sí lo tiene; Duration no
+```
+
+No es una elección de implementación que se pueda evitar. Beam convierte los dos valores
+sin dar alternativa:
+
+- `Windowing.__init__` hace `self.allowed_lateness = Duration.of(allowed_lateness)`
+  (`apache_beam/transforms/core.py`);
+- `FixedWindows.__init__` hace `self.size = Duration.of(size)`
+  (`apache_beam/transforms/window.py`), y además **rechaza** un `timedelta`, que sí tendría
+  `.seconds`.
+
+Las **otras dos aserciones de esa misma prueba sí pasan**, y son las que verifican el
+comportamiento: el modo es `ACCUMULATING` y el trigger es `AfterWatermark`. Lo que no se
+puede leer es el tamaño y la lateness *por esa vía*. Que los valores son correctos se
+comprueba así:
+
+```python
+>>> policy.windowing.windowfn.size          # Duration(60)
+>>> policy.windowing.allowed_lateness       # Duration(120)
+```
+
+**Existe un apaño y se decidió no usarlo.** `Duration.of()` devuelve la instancia tal cual
+si ya es un `Duration`, así que una subclase con una propiedad `seconds` sobreviviría hasta
+`windowing` y la prueba pasaría. Se descartó porque sería código cuyo único propósito es
+satisfacer una suposición incorrecta de la prueba, sin cambiar en nada el comportamiento del
+pipeline — y ocultaría el hallazgo en lugar de reportarlo.
+
+Queda a consulta con la cátedra si la prueba se desarrolló contra otra versión de Beam.
