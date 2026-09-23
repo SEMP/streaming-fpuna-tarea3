@@ -104,7 +104,7 @@ uv run pytest -q
 
 | TODO | Qué resuelve |
 |---|---|
-| 1 · `parse_utc` | ISO-8601 con `Z` → `datetime` **timezone-aware**. Un naive se interpretaría en la zona del proceso, y entonces la ventana asignada dependería de en qué máquina corre el pipeline |
+| 1 · `parse_utc` | ISO-8601 → `datetime` **timezone-aware** en UTC. Acepta **cualquier offset explícito**, no solo `Z`, y rechaza un timestamp sin zona: un naive se interpretaría en la zona del proceso, y entonces la ventana asignada dependería de en qué máquina corre el pipeline |
 | 2 · `assign_fixed_window` | Límites `[inicio, fin)` alineados **a la época**, no al primer evento, para que la misma ventana tenga los mismos límites entre comercios y entre corridas |
 | 3 · `summarize_payments` | El oráculo en Python puro: totales y auditoría con el motivo de cada decisión |
 | 4 · `build_windowed_totals_pipeline` | `Create` → `Filter` → `TimestampedValue` → `WindowInto` → clave por comercio → `CombinePerKey` → límites vía `WindowParam` |
@@ -113,6 +113,28 @@ uv run pytest -q
 | 6 · `build_trigger_policy` | `AfterWatermark` con pane temprano por tiempo de procesamiento, revisiones tardías y modo **acumulativo** |
 | 7 · `make_idempotency_key` | `merchant_id|window_start`: identifica la **celda** del resultado, no el intento de escritura |
 | 8 · `simulate_sink_retries` | Contrasta *upsert* contra *append*: el mismo reintento deja una fila o dos |
+
+## Una comprobación agregada al notebook
+
+El dataset trae todos sus timestamps en `Z`, así que la conversión de husos no queda
+ejercitada por ninguna prueba. Se agregó una celda que la muestra, porque es la propiedad de
+la que depende que la ventana sea estable:
+
+```
+entrada                          → en UTC                     → ventana
+  2026-07-24T13:00:05Z           2026-07-24T13:00:05+00:00  [13:00, 13:01)
+  2026-07-24T10:00:05-03:00      2026-07-24T13:00:05+00:00  [13:00, 13:01)
+  2026-07-24T15:00:05+02:00      2026-07-24T13:00:05+00:00  [13:00, 13:01)
+  2026-07-24T22:00:05+09:00      2026-07-24T13:00:05+00:00  [13:00, 13:01)
+```
+
+Los cuatro son **el mismo instante** escrito de cuatro maneras, y caen en la misma ventana.
+`astimezone` no mueve el momento: solo cambia cómo se escribe. Si la función devolviera el
+timestamp tal como vino, el mismo pago caería en ventanas distintas según cómo lo hubiera
+expresado el emisor.
+
+La celda muestra también los tres casos que se rechazan, incluido el más importante: un
+timestamp **sin zona horaria**.
 
 ## Decisiones que el enunciado dejaba abiertas
 

@@ -124,6 +124,60 @@ def _(mo):
 
 
 @app.cell
+def _(mo):
+    mo.md(r"""
+    ### Comprobación: distintos husos, el mismo instante
+
+    El dataset trae todos sus timestamps en `Z`, así que la conversión de husos no
+    queda ejercitada por las pruebas. Vale la pena mostrarla, porque es la propiedad
+    de la que depende que la ventana sea estable.
+
+    `parse_utc` acepta **cualquier offset explícito** y devuelve siempre el mismo
+    instante en UTC. `astimezone` no mueve el momento: solo cambia cómo se escribe.
+    Por eso el mismo pago cae en la misma ventana aunque el emisor lo haya expresado
+    en su hora local.
+
+    Lo que **no** acepta es un timestamp sin zona: Python lo interpretaría en la zona
+    del proceso, y entonces la ventana asignada dependería de en qué máquina corre el
+    pipeline. Un error ruidoso es mejor que un resultado que cambia de servidor a
+    servidor.
+    """)
+    return
+
+
+@app.cell
+def _(assign_fixed_window, parse_utc):
+    _equivalentes = [
+        "2026-07-24T13:00:05Z",
+        "2026-07-24T10:00:05-03:00",
+        "2026-07-24T15:00:05+02:00",
+        "2026-07-24T22:00:05+09:00",
+    ]
+
+    print("entrada                          → en UTC                     → ventana")
+    for _crudo in _equivalentes:
+        _momento = parse_utc(_crudo)
+        _inicio, _fin = assign_fixed_window(_momento, 60)
+        print(
+            f"  {_crudo:30} {_momento.isoformat()}  "
+            f"[{_inicio:%H:%M}, {_fin:%H:%M})"
+        )
+
+    # La comprobación que importa: escritos distinto, son el mismo instante.
+    assert len({parse_utc(_c) for _c in _equivalentes}) == 1
+    print("\n  los cuatro son el mismo instante ✔")
+
+    print("\nvalores que se rechazan:")
+    for _malo in ["2026-07-24T13:00:05", "", "24/07/2026 13:00"]:
+        try:
+            parse_utc(_malo)
+            print(f"  {_malo!r:24} aceptado (no debería)")
+        except ValueError as _error:
+            print(f"  {_malo!r:24} {_error}")
+    return
+
+
+@app.cell
 def _(datetime):
     def assign_fixed_window(
         timestamp: datetime,
