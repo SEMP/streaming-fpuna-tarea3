@@ -5,15 +5,13 @@ y sus aplicaciones**. La tarea consiste en completar un pipeline de pagos con ti
 evento, ventanas, estado por clave y una salida idempotente.
 
 El [proyecto base](https://github.com/rparrapy/streaming-fpuna-clase6-tarea) es un esqueleto:
-`notebook.py` trae la consigna, los contratos y las funciones sin implementar. Ese contenido
-está en el **primer commit** de este repositorio, `9543164`, así que el trabajo hecho se puede
-ver con un diff:
+`notebook.py` trae la consigna, los contratos y las funciones sin implementar. Acá los ocho
+TODO están resueltos y la suite completa —24 pruebas— queda en verde.
 
-```bash
-git diff 9543164 HEAD -- notebook.py
-```
+El contenido base quedó intacto en el primer commit (`9543164`), de modo que el historial
+muestra qué vino de la cátedra y qué se agregó — [ver los cambios][cambios].
 
-Los ocho TODO están resueltos y la suite completa —24 pruebas— queda en verde.
+[cambios]: https://github.com/SEMP/streaming-fpuna-tarea3/compare/9543164...main
 
 > ### 📌 Nota para la cátedra
 >
