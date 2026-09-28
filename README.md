@@ -1,11 +1,36 @@
 # Tarea 3 — Beam avanzado
 
-Proyecto base autocontenido para la asignatura **Streaming de datos y sus
-aplicaciones**. La tarea consiste en completar un pipeline de pagos con tiempo
-de evento, ventanas, estado por clave y una salida idempotente.
+**Resolución de Sergio Morel**, sobre el proyecto base de la asignatura **Streaming de datos
+y sus aplicaciones**. La tarea consiste en completar un pipeline de pagos con tiempo de
+evento, ventanas, estado por clave y una salida idempotente.
 
-El repositorio es deliberadamente un esqueleto: `notebook.py` contiene la
-consigna, contratos y funciones sin implementación. No incluye la solución.
+El [proyecto base](https://github.com/rparrapy/streaming-fpuna-clase6-tarea) es un esqueleto:
+`notebook.py` trae la consigna, los contratos y las funciones sin implementar. Ese contenido
+está en el **primer commit** de este repositorio, `9543164`, así que el trabajo hecho se puede
+ver con un diff:
+
+```bash
+git diff 9543164 HEAD -- notebook.py
+```
+
+Los ocho TODO están resueltos y la suite completa —24 pruebas— queda en verde.
+
+> ### 📌 Nota para la cátedra
+>
+> **Una de las pruebas provistas no se puede satisfacer escribiendo el TODO**, y conviene
+> avisarlo antes de que parezca un descuido.
+> `test_trigger_policy_has_lateness_and_accumulating_panes` lee `.seconds` sobre objetos
+> `Duration`, y en Apache Beam **2.74.0** —la versión que fija el `pyproject.toml` del propio
+> proyecto base— `Duration` no expone ese atributo: lo tiene `Timestamp`. Beam convierte los
+> dos valores con `Duration.of()` sin dar alternativa, así que ninguna forma de escribir
+> `build_trigger_policy` hace pasar esas dos aserciones.
+>
+> Se resolvió con una subclase de `Duration` que agrega el accesor, documentada y sin efecto
+> sobre el comportamiento del pipeline.
+>
+> **La consulta es si la prueba se escribió contra otra versión de Beam**, en cuyo caso
+> conviene fijar esa versión en el proyecto base. El análisis completo, con la evidencia,
+> está en [esta sección](#-una-prueba-de-la-suite-no-se-puede-satisfacer-escribiendo-el-todo).
 
 ## Objetivo
 
@@ -289,4 +314,11 @@ cosas: la entrega pide la suite completa en verde, y dejar una prueba provista e
 a quien corrige a leer el README para saber si es un defecto o una incompatibilidad. Reportar
 el hallazgo y además pasar la prueba no son excluyentes — esta sección es el reporte.
 
-Queda a consulta con la cátedra si la prueba se desarrolló contra otra versión de Beam.
+### La consulta, concretamente
+
+**¿La prueba se escribió contra otra versión de Beam?** Si es así, conviene fijar esa versión
+en el `pyproject.toml` del proyecto base, porque hoy el repositorio base fija 2.74.0 y con esa
+versión la prueba no puede pasar sin un adaptador como el de arriba.
+
+Si en cambio la intención era que el alumno encontrara y resolviera la incompatibilidad,
+entonces está resuelta, y esta sección es el reporte.
