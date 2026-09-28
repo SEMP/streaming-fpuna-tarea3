@@ -330,6 +330,34 @@ def _(mo):
 
     Para la configuración por defecto, documentá cuántos eventos entran,
     cuántos se aceptan y cuántos totales se producen.
+
+    ### Lo que da el dataset provisto
+
+    Con ventana de 60 s, lateness de 120 s y deduplicación activa:
+
+    | | |
+    |---|---|
+    | Eventos que entran | **9** |
+    | Aceptados | **5** |
+    | Rechazados | **4** — 2 `not_confirmed`, 1 `duplicate`, 1 `too_late` |
+    | De los aceptados, revisiones | **1** |
+    | Totales que se producen | **4** |
+
+    | Comercio | Ventana | Total |
+    |---|---|---|
+    | `m-azul` | 13:00 | 170.000 |
+    | `m-verde` | 13:00 | 80.000 |
+    | `m-verde` | 13:01 | 90.000 |
+    | `m-azul` | 13:02 | 200.000 |
+
+    Los cuatro rechazos son, a propósito, **cuatro motivos distintos**: dos pagos que
+    nunca se confirmaron, una copia de `p-002` que llega 83 s después de la original, y
+    `p-007`, que llega con 169 s de atraso y queda fuera de los 120 s de tolerancia.
+
+    La única revisión es esa copia de `p-002`: llega después de que su ventana cerró,
+    pero dentro de la lateness. **Se acepta** —`accepted=True`, `revision=True`— y aun
+    así no cambia el total, porque la deduplicación la reconoce. Es el caso que muestra
+    que *aceptado* y *sumado* no son lo mismo.
     """)
     return
 

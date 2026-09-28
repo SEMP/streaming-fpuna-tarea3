@@ -1,7 +1,7 @@
 Evidencia de ejecución — Tarea 3: estado, duplicados e idempotencia
 Generada por evidencia/generar-evidencia.sh
-Commit: 1d91a53
-Fecha:  2026-09-28T18:38:02-03:00
+Commit: 1f8cf2b
+Fecha:  2026-09-28T18:47:03-03:00
 
 ════════════════════════════════════════════════════════════════════
  1. Entorno
@@ -24,7 +24,7 @@ apache-beam 2.74.0
 ════════════════════════════════════════════════════════════════════
 
 $ uv sync --frozen
-Checked 67 packages in 0.67ms
+Checked 67 packages in 0.66ms
   → código de salida: 0
 
 ════════════════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ Checked 67 packages in 0.67ms
 
 $ uv run pytest -q
 ........................                                                 [100%]
-24 passed in 2.72s
+24 passed in 2.55s
   → código de salida: 0
 
 ════════════════════════════════════════════════════════════════════
@@ -69,7 +69,7 @@ tests/test_propias.py::test_sin_deduplicar_el_total_cambia PASSED        [ 91%]
 tests/test_propias.py::test_la_clave_rechaza_el_separador PASSED         [ 95%]
 tests/test_propias.py::test_reintentar_en_modo_append_si_duplica PASSED  [100%]
 
-============================== 24 passed in 2.50s ==============================
+============================== 24 passed in 2.62s ==============================
   → código de salida: 0
 
 ════════════════════════════════════════════════════════════════════

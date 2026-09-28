@@ -170,6 +170,23 @@ celdas, así que si alguna fallara la corrida no terminaría en cero.
 | Timer de limpieza | `test_timer_handler_clears_state` |
 | Escritura repetida | `test_retries_converge_to_one_materialized_entity` · `test_reintentar_en_modo_append_si_duplica` |
 
+## Qué produce el dataset provisto
+
+Lo pide el notebook en su sección 2. Con la configuración por defecto —ventana de 60 s,
+lateness de 120 s, deduplicación activa:
+
+| | |
+|---|---|
+| Eventos que entran | **9** |
+| Aceptados | **5** |
+| Rechazados | **4** — 2 `not_confirmed`, 1 `duplicate`, 1 `too_late` |
+| De los aceptados, revisiones | **1** |
+| Totales que se producen | **4** |
+
+Los cuatro rechazos son **cuatro motivos distintos**, que es lo que hace útil al dataset.
+Y la única revisión —la copia de `p-002`, que llega 83 s tarde— se **acepta** y aun así no
+cambia el total, porque la deduplicación la reconoce: *aceptado* y *sumado* no son lo mismo.
+
 ## Las pruebas propias
 
 Van en `tests/test_propias.py`, aparte de las de la cátedra, para que se vea cuál es cuál.
