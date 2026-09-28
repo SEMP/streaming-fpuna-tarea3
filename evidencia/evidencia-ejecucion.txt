@@ -1,0 +1,123 @@
+Evidencia de ejecución — Tarea 3: estado, duplicados e idempotencia
+Generada por evidencia/generar-evidencia.sh
+Commit: 1d91a53
+Fecha:  2026-09-28T18:38:02-03:00
+
+════════════════════════════════════════════════════════════════════
+ 1. Entorno
+════════════════════════════════════════════════════════════════════
+
+$ uname -srm
+Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
+  → código de salida: 0
+
+$ uv run python --version
+Python 3.12.13
+  → código de salida: 0
+
+$ uv run python -c import apache_beam; print('apache-beam', apache_beam.__version__)
+apache-beam 2.74.0
+  → código de salida: 0
+
+════════════════════════════════════════════════════════════════════
+ 2. Dependencias, desde el lockfile
+════════════════════════════════════════════════════════════════════
+
+$ uv sync --frozen
+Checked 67 packages in 0.67ms
+  → código de salida: 0
+
+════════════════════════════════════════════════════════════════════
+ 3. Suite completa
+════════════════════════════════════════════════════════════════════
+
+$ uv run pytest -q
+........................                                                 [100%]
+24 passed in 2.72s
+  → código de salida: 0
+
+════════════════════════════════════════════════════════════════════
+ 4. Detalle por prueba
+════════════════════════════════════════════════════════════════════
+
+$ uv run pytest -v --no-header
+============================= test session starts ==============================
+collecting ... collected 24 items
+
+tests/test_assignment.py::test_parse_utc_returns_timezone_aware_datetime PASSED [  4%]
+tests/test_assignment.py::test_assign_fixed_window_uses_event_time PASSED [  8%]
+tests/test_assignment.py::test_duplicate_does_not_change_total PASSED    [ 12%]
+tests/test_assignment.py::test_deduplication_is_isolated_by_merchant PASSED [ 16%]
+tests/test_assignment.py::test_stateful_dofn_keeps_keys_isolated PASSED  [ 20%]
+tests/test_assignment.py::test_out_of_order_event_uses_its_event_time_window PASSED [ 25%]
+tests/test_assignment.py::test_late_event_within_tolerance_is_a_revision PASSED [ 29%]
+tests/test_assignment.py::test_event_beyond_lateness_is_audited PASSED   [ 33%]
+tests/test_assignment.py::test_windowed_pipeline_produces_totals PASSED  [ 37%]
+tests/test_assignment.py::test_trigger_policy_has_lateness_and_accumulating_panes PASSED [ 41%]
+tests/test_assignment.py::test_retries_converge_to_one_materialized_entity PASSED [ 45%]
+tests/test_assignment.py::test_append_only_sink_materializes_every_attempt PASSED [ 50%]
+tests/test_assignment.py::test_timer_handler_clears_state PASSED         [ 54%]
+tests/test_propias.py::test_un_tardio_dentro_de_la_lateness_corrige_la_ventana PASSED [ 58%]
+tests/test_propias.py::test_un_tardio_fuera_de_la_lateness_no_corrige_nada PASSED [ 62%]
+tests/test_propias.py::test_el_desorden_no_es_lo_mismo_que_el_atraso PASSED [ 66%]
+tests/test_propias.py::test_el_pipeline_no_cuenta_dos_veces_un_duplicado PASSED [ 70%]
+tests/test_propias.py::test_dos_comercios_pueden_repetir_el_mismo_event_id PASSED [ 75%]
+tests/test_propias.py::test_el_pipeline_ventanea_por_tiempo_de_evento_y_no_de_llegada PASSED [ 79%]
+tests/test_propias.py::test_el_oraculo_no_depende_del_orden_del_archivo PASSED [ 83%]
+tests/test_propias.py::test_el_atraso_no_se_trunca_a_entero PASSED       [ 87%]
+tests/test_propias.py::test_sin_deduplicar_el_total_cambia PASSED        [ 91%]
+tests/test_propias.py::test_la_clave_rechaza_el_separador PASSED         [ 95%]
+tests/test_propias.py::test_reintentar_en_modo_append_si_duplica PASSED  [100%]
+
+============================== 24 passed in 2.50s ==============================
+  → código de salida: 0
+
+════════════════════════════════════════════════════════════════════
+ 5. Las siete pruebas mínimas que pide la clase 6
+════════════════════════════════════════════════════════════════════
+
+  duplicado                  test_duplicate_does_not_change_total
+                             test_el_pipeline_no_cuenta_dos_veces_un_duplicado
+  claves aisladas            test_stateful_dofn_keeps_keys_isolated
+                             test_dos_comercios_pueden_repetir_el_mismo_event_id
+  fuera de orden             test_out_of_order_event_uses_its_event_time_window
+                             test_el_desorden_no_es_lo_mismo_que_el_atraso
+  late aceptado              test_late_event_within_tolerance_is_a_revision
+                             test_un_tardio_dentro_de_la_lateness_corrige_la_ventana
+  demasiado tardío          test_event_beyond_lateness_is_audited
+                             test_un_tardio_fuera_de_la_lateness_no_corrige_nada
+  timer de limpieza          test_timer_handler_clears_state
+  escritura repetida         test_retries_converge_to_one_materialized_entity
+                             test_reintentar_en_modo_append_si_duplica
+
+════════════════════════════════════════════════════════════════════
+ 6. Linter
+════════════════════════════════════════════════════════════════════
+
+$ uv run ruff check .
+All checks passed!
+  → código de salida: 0
+
+════════════════════════════════════════════════════════════════════
+ 7. El notebook corriendo de punta a punta
+════════════════════════════════════════════════════════════════════
+
+$ uv run marimo export html notebook.py -o /dev/null
+entrada                          → en UTC                     → ventana
+  2026-07-24T13:00:05Z           2026-07-24T13:00:05+00:00  [13:00, 13:01)
+  2026-07-24T10:00:05-03:00      2026-07-24T13:00:05+00:00  [13:00, 13:01)
+  2026-07-24T15:00:05+02:00      2026-07-24T13:00:05+00:00  [13:00, 13:01)
+  2026-07-24T22:00:05+09:00      2026-07-24T13:00:05+00:00  [13:00, 13:01)
+
+  los cuatro son el mismo instante ✔
+
+valores que se rechazan:
+  '2026-07-24T13:00:05'    timestamp sin zona horaria: '2026-07-24T13:00:05'. Se exige offset explicito para que la ventana no dependa del entorno.
+  ''                       timestamp invalido: ''
+  '24/07/2026 13:00'       timestamp ISO-8601 invalido: '24/07/2026 13:00'
+  → código de salida: 0
+
+════════════════════════════════════════════════════════════════════
+ Fin
+════════════════════════════════════════════════════════════════════
+  Evidencia en evidencia/evidencia-ejecucion.txt · 122 líneas

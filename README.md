@@ -143,6 +143,33 @@ expresado el emisor.
 La celda muestra también los tres casos que se rechazan, incluido el más importante: un
 timestamp **sin zona horaria**.
 
+## Evidencia de ejecución
+
+```bash
+./evidencia/generar-evidencia.sh
+```
+
+Deja [`evidencia/evidencia-ejecucion.txt`](evidencia/evidencia-ejecucion.txt) con una corrida
+completa: entorno y versiones, `uv sync --frozen`, la suite entera, el detalle prueba por
+prueba, el linter, y el notebook ejecutándose de punta a punta con `marimo export`. Cada paso
+registra el comando y su código de salida, y el archivo lleva fecha y commit.
+
+`--frozen` está a propósito: falla si el lockfile no coincide con `pyproject.toml`, así que la
+reproducibilidad queda verificada y no solamente afirmada. Y `marimo export` corre todas las
+celdas, así que si alguna fallara la corrida no terminaría en cero.
+
+### Las siete pruebas mínimas de la clase 6
+
+| Caso pedido | Dónde está |
+|---|---|
+| Duplicado | `test_duplicate_does_not_change_total` · `test_el_pipeline_no_cuenta_dos_veces_un_duplicado` |
+| Claves aisladas | `test_stateful_dofn_keeps_keys_isolated` · `test_dos_comercios_pueden_repetir_el_mismo_event_id` |
+| Evento fuera de orden | `test_out_of_order_event_uses_its_event_time_window` · `test_el_desorden_no_es_lo_mismo_que_el_atraso` |
+| Late aceptado | `test_late_event_within_tolerance_is_a_revision` · `test_un_tardio_dentro_de_la_lateness_corrige_la_ventana` |
+| Evento demasiado tardío | `test_event_beyond_lateness_is_audited` · `test_un_tardio_fuera_de_la_lateness_no_corrige_nada` |
+| Timer de limpieza | `test_timer_handler_clears_state` |
+| Escritura repetida | `test_retries_converge_to_one_materialized_entity` · `test_reintentar_en_modo_append_si_duplica` |
+
 ## Las pruebas propias
 
 Van en `tests/test_propias.py`, aparte de las de la cátedra, para que se vea cuál es cuál.
