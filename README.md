@@ -89,8 +89,13 @@ Implementado por **Sergio Morel**, septiembre de 2026.
 ## Estado de la suite
 
 ```
-13 passed
+24 passed
 ```
+
+**13 son de la cátedra** (`tests/test_assignment.py`, sin tocar) y **11 son propias**
+(`tests/test_propias.py`). El notebook las pide en su sección 3: «Agregá pruebas con
+`TestPipeline` y al menos una prueba temporal con `TestStream` que evidencie un resultado
+late aceptado».
 
 Una de ellas **no se puede satisfacer escribiendo el TODO como pide el enunciado**: lee un
 atributo que Apache Beam 2.74.0 no expone. Se resolvió con un adaptador mínimo y documentado,
@@ -138,6 +143,27 @@ expresado el emisor.
 La celda muestra también los tres casos que se rechazan, incluido el más importante: un
 timestamp **sin zona horaria**.
 
+## Las pruebas propias
+
+Van en `tests/test_propias.py`, aparte de las de la cátedra, para que se vea cuál es cuál.
+
+| Qué fija | Por qué está |
+|---|---|
+| **Un tardío dentro de la lateness corrige la ventana** | Es la prueba temporal que pide el notebook. Con `TestStream`, porque el comportamiento tardío depende de dónde está el watermark y con un reloj real el resultado dependería de la máquina |
+| Un tardío **fuera** de la lateness no corrige nada | El otro lado de la misma decisión |
+| Desorden **no** es lo mismo que atraso | Un evento puede llegar fuera de orden con la ventana todavía abierta |
+| El pipeline no cuenta dos veces un duplicado | **Regresión**: no deduplicaba, y `m-verde` daba 160.000 en lugar de 80.000 |
+| Dos comercios pueden repetir el mismo `event_id` | El estado es por clave |
+| El pipeline ventanea por tiempo de evento | Que no se cuele el de llegada |
+| El oráculo no depende del orden del archivo | **Regresión**: el total daba igual pero la auditoría se daba vuelta |
+| El atraso no se trunca a entero | **Regresión**: 120,9 s contaba como 120 y se aceptaba |
+| Sin deduplicar el total cambia | Mide el contraste: 80.000 contra 160.000 |
+| La clave rechaza el separador | `"a\|b"+"c"` y `"a"+"b\|c"` colapsan en la misma clave |
+| Reintentar en modo append duplica | El contraste que da sentido a la clave idempotente |
+
+Tres de ellas fijan defectos que **existieron de verdad** y los encontró una revisión cruzada,
+no una corrida. Están marcadas como regresión para que no vuelvan.
+
 ## Decisiones que el enunciado dejaba abiertas
 
 **Orden de evaluación en la auditoría:** primero el estado (`not_confirmed`), después la
@@ -160,7 +186,7 @@ timer se programa contra el fin de la ventana **más la lateness permitida**, no
 fin de la ventana: si expirara antes, un tardío legítimo volvería a parecer nuevo y se
 contaría dos veces — justo lo que la deduplicación existe para evitar.
 
-## ⚠️ Una prueba de la suite es insatisfacible en Beam 2.74.0
+## ⚠️ Una prueba de la suite no se puede satisfacer escribiendo el TODO
 
 `test_trigger_policy_has_lateness_and_accumulating_panes` incluye estas dos aserciones:
 
