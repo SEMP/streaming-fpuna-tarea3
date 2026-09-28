@@ -206,7 +206,7 @@ def _(datetime):
 
 
 @app.cell
-def _(Any, Iterable):
+def _(Any, Iterable, assign_fixed_window, parse_utc):
     def summarize_payments(
         events: Iterable[dict[str, Any]],
         *,
@@ -460,7 +460,7 @@ def _(
 
 
 @app.cell
-def _(Any):
+def _(Any, beam):
     def build_trigger_policy(
         *,
         window_seconds: int = 60,
