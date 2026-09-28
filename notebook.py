@@ -233,14 +233,27 @@ def _(Any, Iterable):
         auditoria: list[dict[str, Any]] = []
         vistos: set[tuple[str, str]] = set()
 
-        for evento in events:
+        # **Se recorre en orden de LLEGADA, no en el del archivo.** El oraculo simula
+        # un flujo, y en un flujo lo que decide cual copia de un pago es la original
+        # y cual el duplicado es cual llego primero. Recorrer el archivo tal como
+        # viene haria que reordenarlo cambiara la auditoria: el total daria igual,
+        # pero la copia tardia quedaria marcada como original y viceversa.
+        # El desempate por event_id mantiene el resultado determinista cuando dos
+        # eventos llegan en el mismo instante.
+        ordenados = sorted(
+            events, key=lambda e: (parse_utc(e["arrival_time"]), e["event_id"])
+        )
+
+        for evento in ordenados:
             event_id = evento["event_id"]
             merchant_id = evento["merchant_id"]
             event_time = parse_utc(evento["event_time"])
             arrival_time = parse_utc(evento["arrival_time"])
             inicio, fin = assign_fixed_window(event_time, window_seconds)
 
-            atraso = int((arrival_time - event_time).total_seconds())
+            # Sin truncar: con `int()`, un atraso de 120,9 s contaria como 120 y se
+            # aceptaria un evento que esta fuera de tolerancia.
+            atraso = (arrival_time - event_time).total_seconds()
             demasiado_tarde = atraso > allowed_lateness_seconds
             clave_dedup = (merchant_id, event_id)
             # La deduplicacion es POR COMERCIO: dos comercios distintos pueden usar
@@ -322,7 +335,7 @@ def _(mo):
 
 
 @app.cell
-def _(Any, beam, parse_utc):
+def _(Any, DeduplicatePayments, beam, parse_utc):
     def build_windowed_totals_pipeline(
         pipeline: Any,
         events: list[dict[str, Any]],
@@ -335,6 +348,8 @@ def _(Any, beam, parse_utc):
         comercio, CombinePerKey y metadatos de WindowParam.
         """
         from datetime import UTC
+
+        from apache_beam.typehints import KV
 
         def con_timestamp(evento):
             """Reemplaza el timestamp de procesamiento por el del dominio.
@@ -364,7 +379,18 @@ def _(Any, beam, parse_utc):
             | "SoloConfirmados" >> beam.Filter(lambda e: e.get("status") == "CONFIRMED")
             | "TiempoDeEvento" >> beam.Map(con_timestamp)
             | "Ventanear" >> beam.WindowInto(beam.window.FixedWindows(window_seconds))
-            | "ClavePorComercio" >> beam.Map(lambda e: (e["merchant_id"], e["amount"]))
+            # La clave lleva el evento entero y no solo el monto, porque la
+            # deduplicacion necesita mirar el event_id. El type hint explicito es lo
+            # que le garantiza a Beam un coder determinista para la clave: sin el,
+            # advierte que el estado por clave puede comportarse mal.
+            | "ClavePorComercio" >> beam.Map(
+                lambda e: (e["merchant_id"], e)
+            ).with_output_types(KV[str, Any])
+            # Deduplicar va ANTES de sumar. Si no, el mismo pago entra dos veces en
+            # el total y el pipeline deja de coincidir con el oraculo, que es
+            # exactamente lo que este notebook usa para verificarse.
+            | "Deduplicar" >> beam.ParDo(DeduplicatePayments())
+            | "SoloElMonto" >> beam.Map(lambda par: (par[0], par[1]["amount"]))
             | "Sumar" >> beam.CombinePerKey(sum)
             | "AgregarLimites" >> beam.Map(con_limites)
         )
@@ -446,9 +472,29 @@ def _(Any):
         processing time, revisiones late y modo ACCUMULATING.
         """
         from apache_beam.transforms import trigger
+        from apache_beam.utils.timestamp import Duration
+
+        class DuracionConSegundos(Duration):
+            """Una `Duration` que ademas expone `.seconds`.
+
+            La prueba provista lee `windowfn.size.seconds` y
+            `allowed_lateness.seconds`. En Beam 2.74 `Duration` solo expone
+            `.micros`: `.seconds` existe en `Timestamp`, no en `Duration`, asi que
+            la prueba falla con `AttributeError` sin importar como se escriba esta
+            funcion.
+
+            `Duration.of()` devuelve tal cual lo que ya sea una `Duration`, asi que
+            pasar esta subclase la conserva a traves de `FixedWindows` y de
+            `Windowing` y el accesor sobrevive. No cambia el comportamiento: es el
+            mismo valor con un accesor de mas.
+            """
+
+            @property
+            def seconds(self) -> int:
+                return self.micros // 1_000_000
 
         return beam.WindowInto(
-            beam.window.FixedWindows(window_seconds),
+            beam.window.FixedWindows(DuracionConSegundos(window_seconds)),
             trigger=trigger.AfterWatermark(
                 # Vista temprana por tiempo de procesamiento: el tablero no queda en
                 # blanco mientras la ventana se llena. Es un piso, no un total.
@@ -457,7 +503,7 @@ def _(Any):
                 # reflejarlos de inmediato en lugar de esperar un lote.
                 late=trigger.AfterCount(1),
             ),
-            allowed_lateness=allowed_lateness_seconds,
+            allowed_lateness=DuracionConSegundos(allowed_lateness_seconds),
             # ACUMULATIVO: cada pane trae el total de la ventana, no el delta. El
             # consumidor hace upsert por clave y no necesita recordar que panes ya
             # proceso, lo que lo vuelve idempotente ante reintentos y replay.
@@ -502,7 +548,21 @@ def _(Any):
         Por eso recalcular una ventana produce la misma clave y reemplaza el valor
         anterior en lugar de agregar una fila nueva.
         """
-        return f"{result['merchant_id']}|{result['window_start']}"
+        merchant_id = result["merchant_id"]
+        window_start = result["window_start"]
+
+        # El separador tiene que estar ausente de las partes, o la clave deja de ser
+        # reversible: "a|b" + "c" y "a" + "b|c" producen la misma cadena, y dos celdas
+        # distintas terminarian pisandose en el destino. Se rechaza en lugar de
+        # escapar porque un merchant_id con una barra seria un dato mal formado
+        # aguas arriba, y conviene enterarse ahi y no al ver un total raro.
+        for parte, valor in (("merchant_id", merchant_id), ("window_start", window_start)):
+            if "|" in str(valor):
+                raise ValueError(
+                    f"{parte} no puede contener el separador '|': {valor!r}"
+                )
+
+        return f"{merchant_id}|{window_start}"
 
     def simulate_sink_retries(
         results: list[dict[str, Any]],

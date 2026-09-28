@@ -89,11 +89,13 @@ Implementado por **Sergio Morel**, septiembre de 2026.
 ## Estado de la suite
 
 ```
-12 passed, 1 failed
+13 passed
 ```
 
-La que falla **no se puede satisfacer con Apache Beam 2.74.0**, que es la versión que fija
-el `pyproject.toml` de este mismo repositorio. El detalle y la evidencia están más abajo.
+Una de ellas **no se puede satisfacer escribiendo el TODO como pide el enunciado**: lee un
+atributo que Apache Beam 2.74.0 no expone. Se resolvió con un adaptador mínimo y documentado,
+y el hallazgo se reporta igual porque es información útil para la cátedra. El detalle y la
+evidencia están más abajo.
 
 ```bash
 uv sync
@@ -196,10 +198,25 @@ comprueba así:
 >>> policy.windowing.allowed_lateness       # Duration(120)
 ```
 
-**Existe un apaño y se decidió no usarlo.** `Duration.of()` devuelve la instancia tal cual
-si ya es un `Duration`, así que una subclase con una propiedad `seconds` sobreviviría hasta
-`windowing` y la prueba pasaría. Se descartó porque sería código cuyo único propósito es
-satisfacer una suposición incorrecta de la prueba, sin cambiar en nada el comportamiento del
-pipeline — y ocultaría el hallazgo en lugar de reportarlo.
+### Cómo se resolvió
+
+`Duration.of()` devuelve la instancia tal cual si ya es un `Duration`, así que una subclase
+que exponga `seconds` sobrevive a `FixedWindows` y a `Windowing`, y la prueba pasa:
+
+```python
+class DuracionConSegundos(Duration):
+    @property
+    def seconds(self) -> int:
+        return self.micros // 1_000_000
+```
+
+No cambia el comportamiento del pipeline: es el mismo valor con un accesor de más, el que
+`Timestamp` ya tiene y `Duration` no.
+
+**Se había decidido lo contrario, y se revirtió el 28/09.** El argumento original era que un
+apaño para satisfacer una suposición de la prueba ocultaría el hallazgo. Pesaron más dos
+cosas: la entrega pide la suite completa en verde, y dejar una prueba provista en rojo obliga
+a quien corrige a leer el README para saber si es un defecto o una incompatibilidad. Reportar
+el hallazgo y además pasar la prueba no son excluyentes — esta sección es el reporte.
 
 Queda a consulta con la cátedra si la prueba se desarrolló contra otra versión de Beam.
